@@ -385,7 +385,7 @@ with st.expander("📌 Quick Questions", expanded=False):
                     messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
                     
                     response = client.chat.completions.create(
-                        model="meta-llama/Meta-Llama-3.1-8B-Instruct"
+                        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
                         messages=messages,
                         temperature=0.7,
                         max_tokens=500
@@ -601,7 +601,7 @@ if analyze_btn:
 
                 try:
                     response = client.chat.completions.create(
-                        model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                        model="meta-llama/Meta-Llama-3.1-8B-Instruct",
                         messages=[
                             {"role": "system", "content": "You are HeartAlert AI. Provide clear, well-structured health recommendations. Use simple numbered sections without markdown symbols like asterisks or double asterisks. Write in plain text with clear formatting."},
                             {"role": "user", "content": prompt}
