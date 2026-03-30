@@ -173,8 +173,8 @@ model, scaler, expected_columns = load_models()
 # -------------------------
 # Setup Together Client
 # -------------------------
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-client = Together(api_key=TOGETHER_API_KEY)
+# TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
+client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
 MODEL_NAME = "togethercomputer/llama-2-7b-chat"
 
 # -------------------------
