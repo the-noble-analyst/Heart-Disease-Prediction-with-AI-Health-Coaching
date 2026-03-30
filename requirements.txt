@@ -2,5 +2,6 @@ streamlit
 pandas
 joblib
 scikit-learn
+google-generativeai
 together
 fpdf==1.7.2
