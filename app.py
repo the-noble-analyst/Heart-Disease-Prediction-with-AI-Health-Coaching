@@ -1,5 +1,5 @@
 import os
-from together import Together
+import google.generativeai as genai
 import streamlit as st
 import pandas as pd
 import joblib
@@ -171,11 +171,53 @@ def load_models():
 model, scaler, expected_columns = load_models()
 
 # -------------------------
-# Setup Together Client
+# Setup Gemini Client
 # -------------------------
-# TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
-client = Together(api_key=st.secrets["TOGETHER_API_KEY"])
-MODEL_NAME = "togethercomputer/llama-2-7b-chat"
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+gemini_model = genai.GenerativeModel(
+    model_name="gemini-2.0-flash",
+    system_instruction="""You are HeartAlert, a professional and caring heart health AI assistant.
+Provide evidence-based, supportive, and actionable health guidance.
+Be empathetic but clear. Keep responses concise and well-formatted.
+If the user asks about specific symptoms or medical advice,
+always remind them to consult a healthcare professional.
+Do not use asterisks or markdown symbols in your responses — use plain text only."""
+)
+
+def get_gemini_response(messages: list[dict], max_tokens: int = 500) -> str:
+    """
+    Convert OpenAI-style message list to Gemini format and get a response.
+    Skips any 'system' role messages (already handled via system_instruction).
+    Roles: 'user' -> 'user', 'assistant' -> 'model'
+    """
+    gemini_history = []
+    for msg in messages[:-1]:  # All but the last message go into history
+        if msg["role"] == "system":
+            continue
+        gemini_history.append({
+            "role": "user" if msg["role"] == "user" else "model",
+            "parts": [msg["content"]]
+        })
+
+    chat = gemini_model.start_chat(history=gemini_history)
+
+    # The last message is the new user turn
+    last_message = messages[-1]["content"]
+    response = chat.send_message(
+        last_message,
+        generation_config=genai.types.GenerationConfig(max_output_tokens=max_tokens)
+    )
+    return response.text.strip()
+
+
+def get_gemini_simple(prompt: str, max_tokens: int = 700) -> str:
+    """Single-turn generation for recommendations and similar tasks."""
+    response = gemini_model.generate_content(
+        prompt,
+        generation_config=genai.types.GenerationConfig(max_output_tokens=max_tokens)
+    )
+    return response.text.strip()
+
 
 # -------------------------
 # PDF Report Generation
@@ -372,27 +414,10 @@ with st.expander("📌 Quick Questions", expanded=False):
     for idx, question in enumerate(quick_questions):
         with cols[idx % 2]:
             if st.button(question, key=f"quick_q_{idx}", use_container_width=True):
-                # Add user question
                 st.session_state["messages"].append({"role": "user", "content": question})
                 
-                # Get AI response
                 try:
-                    system_message = """You are HeartAlert, a professional and caring heart health AI assistant. 
-                    Provide evidence-based, supportive, and actionable health guidance. 
-                    Be empathetic but clear. Keep responses concise and well-formatted.
-                    If the user asks about specific symptoms or medical advice, 
-                    always remind them to consult a healthcare professional."""
-                    
-                    messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
-                    
-                    response = client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=messages,
-                        temperature=0.7,
-                        max_tokens=500
-                    )
-                    ai_reply = response.choices[0].message.content.strip()
-                    # Remove markdown symbols
+                    ai_reply = get_gemini_response(st.session_state["messages"], max_tokens=500)
                     ai_reply = ai_reply.replace('**', '').replace('*', '')
                     st.session_state["messages"].append({"role": "assistant", "content": ai_reply})
                 except Exception as e:
@@ -419,22 +444,7 @@ if user_input := st.chat_input("Ask me anything about heart health..."):
     with st.chat_message("assistant", avatar="❤️"):
         with st.spinner("Thinking..."):
             try:
-                system_message = """You are HeartAlert, a professional and caring heart health AI assistant. 
-                Provide evidence-based, supportive, and actionable health guidance. 
-                Be empathetic but clear. Keep responses concise and well-formatted.
-                If the user asks about specific symptoms or medical advice, 
-                always remind them to consult a healthcare professional."""
-                
-                messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
-                
-                response = client.chat.completions.create(
-                    model=MODEL_NAME,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=500
-                )
-                ai_reply = response.choices[0].message.content.strip()
-                # Remove markdown symbols
+                ai_reply = get_gemini_response(st.session_state["messages"], max_tokens=500)
                 ai_reply = ai_reply.replace('**', '').replace('*', '')
                 st.session_state["messages"].append({"role": "assistant", "content": ai_reply})
                 st.markdown(ai_reply)
@@ -525,21 +535,14 @@ if analyze_btn:
 
             input_df = pd.DataFrame([raw_input])
 
-            # Fill missing columns
             for col in expected_columns:
                 if col not in input_df.columns:
                     input_df[col] = 0
 
-            # Reorder columns
             input_df = input_df[expected_columns]
-
-            # Scale input
             scaled_input = scaler.transform(input_df)
-
-            # Predict
             prediction = model.predict(scaled_input)[0]
             
-            # Store data for report
             st.session_state["user_data"] = {
                 'name': user_name,
                 'Age': age,
@@ -558,7 +561,6 @@ if analyze_btn:
             st.session_state["prediction"] = prediction
             st.session_state["prediction_made"] = True
 
-            # Display prediction
             st.markdown("---")
             if prediction == 1:
                 st.error("**HIGH RISK of Heart Disease Detected**")
@@ -575,43 +577,34 @@ if analyze_btn:
                 Continue maintaining a healthy lifestyle and regular check-ups.
                 """)
 
-            # Generate AI Recommendations
+            # Generate AI Recommendations via Gemini
             st.markdown("---")
             st.markdown("### Personalized Health Recommendations")
             
             with st.spinner("🤖 Generating personalized health tips..."):
                 prompt = f"""
-                Patient Information:
-                - Name: {user_name}
-                - Age: {age}, Gender: {'Male' if sex == 'M' else 'Female'}
-                - Blood Pressure: {resting_bp} mm Hg
-                - Cholesterol: {cholesterol} mg/dL
-                - Max Heart Rate: {max_hr} bpm
-                - Symptoms: {symptoms}
-                - Risk Assessment: {'HIGH RISK' if prediction == 1 else 'LOW RISK'}
+Patient Information:
+- Name: {user_name}
+- Age: {age}, Gender: {'Male' if sex == 'M' else 'Female'}
+- Blood Pressure: {resting_bp} mm Hg
+- Cholesterol: {cholesterol} mg/dL
+- Max Heart Rate: {max_hr} bpm
+- Symptoms: {symptoms}
+- Risk Assessment: {'HIGH RISK' if prediction == 1 else 'LOW RISK'}
 
-                Provide 4-5 specific, actionable health recommendations in clear sections:
-                1. Immediate Actions (if high risk) or Preventive Measures (if low risk)
-                2. Dietary Recommendations
-                3. Exercise Guidelines
-                4. Lifestyle Modifications
-                5. Medical Follow-up
+Provide 4-5 specific, actionable health recommendations in clear plain-text sections:
+1. Immediate Actions (if high risk) or Preventive Measures (if low risk)
+2. Dietary Recommendations
+3. Exercise Guidelines
+4. Lifestyle Modifications
+5. Medical Follow-up
 
-                Be empathetic, encouraging, and professional. Use simple headings without asterisks.
-                """
+Be empathetic, encouraging, and professional.
+Do not use asterisks, markdown symbols, or hashtags. Use plain numbered text only.
+"""
 
                 try:
-                    response = client.chat.completions.create(
-                        model=MODEL_NAME,
-                        messages=[
-                            {"role": "system", "content": "You are HeartAlert AI. Provide clear, well-structured health recommendations. Use simple numbered sections without markdown symbols like asterisks or double asterisks. Write in plain text with clear formatting."},
-                            {"role": "user", "content": prompt}
-                        ],
-                        temperature=0.7,
-                        max_tokens=700
-                    )
-                    tips = response.choices[0].message.content.strip()
-                    # Remove all markdown symbols
+                    tips = get_gemini_simple(prompt, max_tokens=700)
                     tips_clean = tips.replace('**', '').replace('*', '').replace('#', '')
                     st.session_state["tips"] = tips_clean
 
@@ -666,7 +659,3 @@ st.markdown("""
     <p style='font-size: 0.8rem; margin-top: 1rem;'>© 2025 HeartAlert. All rights reserved.</p>
 </div>
 """, unsafe_allow_html=True)
-
-
-
-
