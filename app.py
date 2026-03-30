@@ -175,6 +175,7 @@ model, scaler, expected_columns = load_models()
 # -------------------------
 TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY")
 client = Together(api_key=TOGETHER_API_KEY)
+MODEL_NAME = "togethercomputer/llama-2-7b-chat"
 
 # -------------------------
 # PDF Report Generation
@@ -385,7 +386,7 @@ with st.expander("📌 Quick Questions", expanded=False):
                     messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
                     
                     response = client.chat.completions.create(
-                        model="mistralai/Mistral-7B-Instruct-v0.1",
+                        model=MODEL_NAME,
                         messages=messages,
                         temperature=0.7,
                         max_tokens=500
@@ -427,7 +428,7 @@ if user_input := st.chat_input("Ask me anything about heart health..."):
                 messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
                 
                 response = client.chat.completions.create(
-                    model="mistralai/Mistral-7B-Instruct-v0.1",
+                    model=MODEL_NAME,
                     messages=messages,
                     temperature=0.7,
                     max_tokens=500
@@ -601,7 +602,7 @@ if analyze_btn:
 
                 try:
                     response = client.chat.completions.create(
-                        model="mistralai/Mistral-7B-Instruct-v0.1",
+                        model=MODEL_NAME,
                         messages=[
                             {"role": "system", "content": "You are HeartAlert AI. Provide clear, well-structured health recommendations. Use simple numbered sections without markdown symbols like asterisks or double asterisks. Write in plain text with clear formatting."},
                             {"role": "user", "content": prompt}
