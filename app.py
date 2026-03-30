@@ -427,7 +427,7 @@ if user_input := st.chat_input("Ask me anything about heart health..."):
                 messages = [{"role": "system", "content": system_message}] + st.session_state["messages"]
                 
                 response = client.chat.completions.create(
-                    model="meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+                    model="meta-llama/Meta-Llama-3.1-8B-Instruct",
                     messages=messages,
                     temperature=0.7,
                     max_tokens=500
