@@ -1,5 +1,5 @@
 import os
-import google.generativeai as genai
+from groq import Groq
 import streamlit as st
 import pandas as pd
 import joblib
@@ -171,52 +171,42 @@ def load_models():
 model, scaler, expected_columns = load_models()
 
 # -------------------------
-# Setup Gemini Client
+# Setup Groq Client
 # -------------------------
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-gemini_model = genai.GenerativeModel(
-    model_name="gemini-2.0-flash",
-    system_instruction="""You are HeartAlert, a professional and caring heart health AI assistant.
+groq_client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+GROQ_MODEL = "llama-3.3-70b-versatile"
+SYSTEM_PROMPT = """You are HeartAlert, a professional and caring heart health AI assistant.
 Provide evidence-based, supportive, and actionable health guidance.
 Be empathetic but clear. Keep responses concise and well-formatted.
 If the user asks about specific symptoms or medical advice,
 always remind them to consult a healthcare professional.
 Do not use asterisks or markdown symbols in your responses — use plain text only."""
-)
 
-def get_gemini_response(messages: list[dict], max_tokens: int = 500) -> str:
-    """
-    Convert OpenAI-style message list to Gemini format and get a response.
-    Skips any 'system' role messages (already handled via system_instruction).
-    Roles: 'user' -> 'user', 'assistant' -> 'model'
-    """
-    gemini_history = []
-    for msg in messages[:-1]:  # All but the last message go into history
-        if msg["role"] == "system":
-            continue
-        gemini_history.append({
-            "role": "user" if msg["role"] == "user" else "model",
-            "parts": [msg["content"]]
-        })
 
-    chat = gemini_model.start_chat(history=gemini_history)
-
-    # The last message is the new user turn
-    last_message = messages[-1]["content"]
-    response = chat.send_message(
-        last_message,
-        generation_config=genai.types.GenerationConfig(max_output_tokens=max_tokens)
+def get_groq_response(messages: list[dict], max_tokens: int = 500) -> str:
+    """Multi-turn chat using the full conversation history."""
+    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    response = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=full_messages,
+        max_tokens=max_tokens,
+        temperature=0.7
     )
-    return response.text.strip()
+    return response.choices[0].message.content.strip()
 
 
-def get_gemini_simple(prompt: str, max_tokens: int = 700) -> str:
+def get_groq_simple(prompt: str, max_tokens: int = 700) -> str:
     """Single-turn generation for recommendations and similar tasks."""
-    response = gemini_model.generate_content(
-        prompt,
-        generation_config=genai.types.GenerationConfig(max_output_tokens=max_tokens)
+    response = groq_client.chat.completions.create(
+        model=GROQ_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt}
+        ],
+        max_tokens=max_tokens,
+        temperature=0.7
     )
-    return response.text.strip()
+    return response.choices[0].message.content.strip()
 
 
 # -------------------------
@@ -417,7 +407,7 @@ with st.expander("📌 Quick Questions", expanded=False):
                 st.session_state["messages"].append({"role": "user", "content": question})
                 
                 try:
-                    ai_reply = get_gemini_response(st.session_state["messages"], max_tokens=500)
+                    ai_reply = get_groq_response(st.session_state["messages"], max_tokens=500)
                     ai_reply = ai_reply.replace('**', '').replace('*', '')
                     st.session_state["messages"].append({"role": "assistant", "content": ai_reply})
                 except Exception as e:
@@ -444,7 +434,7 @@ if user_input := st.chat_input("Ask me anything about heart health..."):
     with st.chat_message("assistant", avatar="❤️"):
         with st.spinner("Thinking..."):
             try:
-                ai_reply = get_gemini_response(st.session_state["messages"], max_tokens=500)
+                ai_reply = get_groq_response(st.session_state["messages"], max_tokens=500)
                 ai_reply = ai_reply.replace('**', '').replace('*', '')
                 st.session_state["messages"].append({"role": "assistant", "content": ai_reply})
                 st.markdown(ai_reply)
@@ -604,7 +594,7 @@ Do not use asterisks, markdown symbols, or hashtags. Use plain numbered text onl
 """
 
                 try:
-                    tips = get_gemini_simple(prompt, max_tokens=700)
+                    tips = get_groq_simple(prompt, max_tokens=700)
                     tips_clean = tips.replace('**', '').replace('*', '').replace('#', '')
                     st.session_state["tips"] = tips_clean
 
