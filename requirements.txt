@@ -2,6 +2,5 @@ streamlit
 pandas
 joblib
 scikit-learn
-google-generativeai
-together
+groq
 fpdf==1.7.2
